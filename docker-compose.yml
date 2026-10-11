@@ -1,0 +1,41 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-TaskManagementDb}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    ports:
+      # Host'ta 5433: bilgisayarında zaten çalışan bir PostgreSQL (5432) ile çakışmasın
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy   # DB hazır olmadan API başlamaz
+    environment:
+      ConnectionStrings__DefaultConnection: Host=db;Port=5432;Database=${POSTGRES_DB:-TaskManagementDb};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-postgres}
+      # DEMO değeri: gerçek kullanımda .env ile en az 32 karakterlik rastgele bir anahtar verin
+      Jwt__Secret: ${JWT_SECRET:-demo-only-change-me-use-a-long-random-secret-key}
+      Jwt__Issuer: TaskManagement.API
+      Jwt__Audience: TaskManagement.Client
+      Jwt__ExpirationMinutes: "60"
+      Database__MigrateOnStartup: "true"
+      Swagger__Enabled: "true"
+    ports:
+      - "8080:8080"
+
+volumes:
+  pgdata:
